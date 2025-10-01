@@ -2,6 +2,7 @@ import os
 import numpy as np
 from PIL import Image
 from conv import Conv3x3
+import matplotlib.pyplot as plt
 
 DATA_ROOT = "/Users/matt/Documents/usyd_yr2_sem2/mentorship program/Interstellar/archive-2"
 
@@ -21,10 +22,11 @@ def list_image_paths_and_labels(root_dir):
                 samples.append((os.path.join(class_dir, fname), class_name))
     return samples
 
-def load_image_as_array(path, size=(28, 28)):
+
+def load_image_as_array(path, size=(28, 28)): #normalise the image to grayscale and resize it to 28x28
     img = Image.open(path).convert("L")
-    img = img.resize(size)
-    arr = np.array(img, dtype=np.float32) / 255.0
+    img = img.resize(size) #resize the image to 28x28
+    arr = np.array(img, dtype=np.float32) / 255.0 #div by 255 to normalise the image to grayscale
     return arr
 
 if __name__ == "__main__":
@@ -52,7 +54,12 @@ if __name__ == "__main__":
     conv = Conv3x3(8)
     for i, (image_path, label) in enumerate(selected, start=1):
         image = load_image_as_array(image_path, size=(28, 28))
+        #plt.imshow(image, cmap='gray')
+        #plt.title(f"{label}")
+        #plt.axis('off')
+        #plt.show()
         output = conv.forward(image)
         print(f"[{i}/{len(selected)}] Sample: {image_path}")
         print(f"Label: {label}")
         print(f"Conv output shape: {output.shape}")  # (26, 26, 8)
+        
