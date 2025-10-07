@@ -33,4 +33,25 @@ to do
 
 - need to research some other metrics 
 
+
+Per-class Recall (Sensitivity)
+- Of all actual leaves of class k, how many you correctly catch. This is the key “don’t 
+miss sick plants” metric. Aim high (e.g., ≥0.90) for each deficiency you care about.
+
+Balanced Accuracy
+- Mean of recall across classes. Handles class imbalance and tells you how fairly the 
+model performs across all deficiencies (not just the common ones).
+
+Macro F1
+- Harmonic mean of precision & recall per class, then averaged equally across classes. 
+Rewards models that both find and are right about rare deficiencies.
+
+Macro AUPRC (Area Under Precision–Recall Curve)
+- Threshold-free measure that’s more informative than AUROC when some deficiencies are rare. 
+Reflects performance across all possible decision thresholds.
+
+Calibration (ECE: Expected Calibration Error)
+- Checks whether a “0.85 confidence” prediction is correct ~85% of the time. Crucial if you’ll 
+set action thresholds or show confidence to agronomists.
+
 '''
