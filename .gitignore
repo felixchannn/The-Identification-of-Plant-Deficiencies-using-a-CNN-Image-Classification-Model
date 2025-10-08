@@ -1,0 +1,57 @@
+# Data directory - each team member should place their data here
+archive-2/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Model outputs
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+
+# Generated plots
+*.png
+*.jpg
+*.jpeg
+confusion_matrix*.png
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log
