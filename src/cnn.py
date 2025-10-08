@@ -1,11 +1,9 @@
 import os
 import numpy as np
-from PIL import Image
-from conv import Conv3x3
-import matplotlib.pyplot as plt
+import pandas as pd
 import matplotlib.pyplot as plt
 
-# Optional: Keras/TensorFlow for training a CNN similar to your tutorial
+# Keras/TensorFlow for CNN training
 try:
     from tensorflow.keras.utils import to_categorical
     from tensorflow.keras.models import Sequential
@@ -16,64 +14,56 @@ try:
 except Exception:
     KERAS_AVAILABLE = False
 
-# Optional: evaluation utilities
+# Evaluation utilities
 try:
     from sklearn.metrics import confusion_matrix
+    from sklearn.model_selection import StratifiedKFold
     SKLEARN_AVAILABLE = True
 except Exception:
     SKLEARN_AVAILABLE = False
 
-# Optional: seaborn heatmap for nicer confusion matrix visualization
-try:
-    import seaborn as sns
-    SEABORN_AVAILABLE = True
-except Exception:
-    SEABORN_AVAILABLE = False
-
 DATA_ROOT = "./archive-2"
 
-# Mode switch:
-#   - "demo": run the hand-rolled Conv3x3 forward pass on selected images (existing behavior)
-#   - "train": build a dataset from all class folders and train a Keras CNN
-MODE = "train"  # change to "train" to use the Keras model
+# Image/generator/model config for K-Fold training
+TARGET_SIZE = (227, 227)
+COLOR_MODE = "rgb"  # "grayscale" or "rgb"
+BATCH_SIZE = 32
+EPOCHS = 10
+MODEL_ARCH = "tutorial"  # "tutorial" uses 4x Conv2D stack; "simple" uses build_keras_cnn
 
-# Selection controls: choose by class folder and either index or count
-SELECT_CLASS = "eggplant__N"
-SELECT_INDEX = 0     # used when selecting a single sample by index
-SELECT_COUNT = 30     # when >0, selects up to this many samples of SELECT_CLASS
+# Dataset size controls
+TRAIN_CLASS_FILTER = ["eggplant__K", "cucumber__K", "tomato__K"]  # [] means use all classes
+MAX_SAMPLES_PER_CLASS = None
 
-def list_image_paths_and_labels(root_dir):
-    samples = []
-    for class_name in sorted(os.listdir(root_dir)):
-        class_dir = os.path.join(root_dir, class_name)
-        if not os.path.isdir(class_dir):
-            continue
-        for fname in sorted(os.listdir(class_dir)):
-            if fname.lower().endswith((".jpg", ".jpeg", ".png")):
-                samples.append((os.path.join(class_dir, fname), class_name))
-    return samples
-
-
-def load_image_as_array(path, size=(28, 28)): #normalise the image to grayscale and resize it to 28x28
+def load_image_as_array(path, size=(28, 28)):
+    """Load and normalize image to grayscale and resize it."""
+    from PIL import Image
     img = Image.open(path).convert("L")
-    img = img.resize(size) #resize the image to 28x28
-    arr = np.array(img, dtype=np.float32) / 255.0 #div by 255 to normalise the image to grayscale
+    img = img.resize(size)
+    arr = np.array(img, dtype=np.float32) / 255.0
     return arr
 
-def build_dataset_from_folders(root_dir, size=(28, 28)):
+def build_dataset_from_folders(root_dir, size=(28, 28), class_filter=None, per_class_limit=None):
     """
     Loads all images under root_dir, returning (X, y, class_names).
     - X: numpy array of shape (N, 28, 28, 1)
     - y: integer class indices of shape (N,)
     - class_names: sorted list of class folder names, index-aligned with y
     """
-    class_names = [d for d in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, d))]
+    class_names_all = [d for d in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, d))]
+    if class_filter:
+        allowed = set(class_filter)
+        class_names = [d for d in class_names_all if d in allowed]
+    else:
+        class_names = class_names_all
+    
     class_name_to_index = {name: idx for idx, name in enumerate(class_names)}
 
     images = []
     labels = []
     for class_name in class_names:
         class_dir = os.path.join(root_dir, class_name)
+        count_for_class = 0
         for fname in sorted(os.listdir(class_dir)):
             if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
                 continue
@@ -84,6 +74,9 @@ def build_dataset_from_folders(root_dir, size=(28, 28)):
                 continue
             images.append(img_arr)
             labels.append(class_name_to_index[class_name])
+            count_for_class += 1
+            if per_class_limit is not None and count_for_class >= per_class_limit:
+                break
 
     if not images:
         raise RuntimeError(f"No images found under {root_dir}")
@@ -93,15 +86,33 @@ def build_dataset_from_folders(root_dir, size=(28, 28)):
     y = np.array(labels, dtype=np.int64)
     return X, y, class_names
 
-def simple_train_val_split(num_samples, train_ratio=0.8, shuffle=True, seed=42):
-    indices = np.arange(num_samples)
-    if shuffle:
-        rng = np.random.RandomState(seed)
-        rng.shuffle(indices)
-    split = int(num_samples * train_ratio)
-    return indices[:split], indices[split:]
+def build_dataframe_from_folders(root_dir, class_filter=None, per_class_limit=None):
+    """
+    Builds a DataFrame with columns ["path", "class"] from a directory tree
+    where each class is a subfolder containing images.
+    """
+    records = []
+    for class_name in sorted(os.listdir(root_dir)):
+        class_dir = os.path.join(root_dir, class_name)
+        if not os.path.isdir(class_dir):
+            continue
+        if class_filter and class_name not in set(class_filter):
+            continue
+        count_for_class = 0
+        for fname in sorted(os.listdir(class_dir)):
+            if not fname.lower().endswith((".jpg", ".jpeg", ".png")):
+                continue
+            records.append({
+                "path": os.path.join(class_dir, fname),
+                "class": class_name,
+            })
+            count_for_class += 1
+            if per_class_limit is not None and count_for_class >= per_class_limit:
+                break
+    return pd.DataFrame.from_records(records, columns=["path", "class"])
 
 def build_keras_cnn(input_shape, num_classes):
+    """Simple CNN architecture."""
     model = Sequential()
     # First conv block
     model.add(Conv2D(filters=8, kernel_size=(5, 5), padding='same', activation='relu', input_shape=input_shape))
@@ -120,179 +131,196 @@ def build_keras_cnn(input_shape, num_classes):
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
+def build_tutorial_cnn(input_shape, num_classes):
+    """Tutorial-style CNN architecture."""
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        MaxPool2D((2, 2)),
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(num_classes, activation='softmax'),
+    ])
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
 if __name__ == "__main__":
-    if MODE == "train":
-        if not KERAS_AVAILABLE:
-            raise RuntimeError("Keras/TensorFlow is not available. Please install tensorflow to use MODE='train'.")
+    if not KERAS_AVAILABLE:
+        raise RuntimeError("Keras/TensorFlow is not available. Please install tensorflow to run CNN training.")
+    
+    if not SKLEARN_AVAILABLE:
+        raise RuntimeError("sklearn is required for StratifiedKFold. Please install scikit-learn.")
 
-        print("Building dataset...")
-        X, y, class_names = build_dataset_from_folders(DATA_ROOT, size=(28, 28))
-        num_classes = len(class_names)
-        print(f"Total samples: {X.shape[0]}, Classes: {num_classes}")
+    # Configure class filtering
+    class_filter = TRAIN_CLASS_FILTER if TRAIN_CLASS_FILTER else None
 
-        train_idx, val_idx = simple_train_val_split(X.shape[0], train_ratio=0.8)
+    print("Building dataset...")
+    X, y, class_names = build_dataset_from_folders(
+        DATA_ROOT,
+        size=(28, 28),
+        class_filter=class_filter,
+        per_class_limit=MAX_SAMPLES_PER_CLASS,
+    )
+    num_classes = len(class_names)
+    print(f"Total samples: {X.shape[0]}, Classes: {num_classes}")
+    if num_classes < 2:
+        raise RuntimeError("Need at least 2 classes to train a classifier. Increase TRAIN_CLASS_FILTER to include another class.")
+
+    # Stratified K-Fold Cross-Validation
+    n_splits = 5
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    fold_accuracies = []
+    last_fold_artifacts = {}
+
+    channels = 1 if COLOR_MODE == "grayscale" else 3
+    batch_size = BATCH_SIZE
+    epochs = EPOCHS
+
+    # Build a master DataFrame of all samples for convenience/analysis
+    df_all = build_dataframe_from_folders(
+        DATA_ROOT,
+        class_filter=class_filter,
+        per_class_limit=MAX_SAMPLES_PER_CLASS,
+    )
+    print(f"DataFrame built: {len(df_all)} rows, columns={list(df_all.columns)}")
+
+    for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y), start=1):
+        print(f"\n===== Fold {fold_idx}/{n_splits} =====")
         X_train, X_val = X[train_idx], X[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
 
-        y_train_cat = to_categorical(y_train, num_classes=num_classes)
-        y_val_cat = to_categorical(y_val, num_classes=num_classes)
+        # Per-fold train/val dataframes
+        train_df = df_all.iloc[train_idx].reset_index(drop=True)
+        val_df = df_all.iloc[val_idx].reset_index(drop=True)
+        print(f"Fold {fold_idx}: train_df={len(train_df)} rows, val_df={len(val_df)} rows")
 
-        model = build_keras_cnn(input_shape=(28, 28, 1), num_classes=num_classes)
+        # Generators will handle labels; to_categorical here ensures class count availability
+        _ = to_categorical(y_train, num_classes=num_classes)
+        _ = to_categorical(y_val, num_classes=num_classes)
+
+        if MODEL_ARCH == "tutorial":
+            model = build_tutorial_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
+        else:
+            model = build_keras_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
         model.summary()
 
-        # Data augmentation to reduce overfitting
-        datagen = ImageDataGenerator(
-            featurewise_center=False,
-            samplewise_center=False,
-            featurewise_std_normalization=False,
-            samplewise_std_normalization=False,
-            zca_whitening=False,
+        # ImageDataGenerators and dataframe-based generators
+        train_datagen = ImageDataGenerator(
+            rescale=1.0/255.0,
+            horizontal_flip=True,
             rotation_range=5,
-            zoom_range=0.1,
             width_shift_range=0.1,
             height_shift_range=0.1,
-            horizontal_flip=False,
-            vertical_flip=False,
+            zoom_range=0.1,
         )
-        datagen.fit(X_train)
+        val_datagen = ImageDataGenerator(rescale=1.0/255.0)
 
-        print("Training model with data augmentation...")
-        batch_size = 250
-        epochs = 10
-        steps_per_epoch = int(np.ceil(X_train.shape[0] / batch_size))
+        train_generator = train_datagen.flow_from_dataframe(
+            dataframe=train_df,
+            directory=None,
+            x_col="path",
+            y_col="class",
+            class_mode="categorical",
+            classes=class_names,
+            target_size=TARGET_SIZE,
+            color_mode=COLOR_MODE,
+            batch_size=batch_size,
+            shuffle=True,
+        )
+
+        val_generator = val_datagen.flow_from_dataframe(
+            dataframe=val_df,
+            directory=None,
+            x_col="path",
+            y_col="class",
+            class_mode="categorical",
+            classes=class_names,
+            target_size=TARGET_SIZE,
+            color_mode=COLOR_MODE,
+            batch_size=batch_size,
+            shuffle=False,
+        )
+
+        steps_per_epoch = int(np.ceil(len(train_df) / batch_size))
+        validation_steps = int(np.ceil(len(val_df) / batch_size))
+
         history = model.fit(
-            datagen.flow(X_train, y_train_cat, batch_size=batch_size),
-            validation_data=(X_val, y_val_cat),
+            train_generator,
+            validation_data=val_generator,
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
+            validation_steps=validation_steps,
             verbose=1,
         )
 
-        val_loss, val_acc = model.evaluate(X_val, y_val_cat, verbose=0)
-        print(f"Validation accuracy: {val_acc:.4f}")
-
-        # Plot validation loss over epochs
-        if 'val_loss' in history.history:
-            plt.plot(history.history['val_loss'], color='b', label='validation loss')
-            plt.title('Test Loss')
-            plt.xlabel('Number of Epochs')
-            plt.ylabel('Loss')
-            plt.legend()
-            plt.show()
-
-        # Confusion matrix on validation set
-        if SKLEARN_AVAILABLE:
-            val_pred_probs = model.predict(X_val, batch_size=250, verbose=0)
-            y_val_pred = np.argmax(val_pred_probs, axis=1)
-            cm = confusion_matrix(y_true=y_val, y_pred=y_val_pred)
-            
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.axis('off')
-            tbl = ax.table(cellText=cm, rowLabels=class_names, colLabels=class_names, loc='center')
-            tbl.auto_set_font_size(False)
-            tbl.set_fontsize(8)
-            tbl.scale(1, 1.5)
-            plt.title('Confusion Matrix')
-            # Save for headless environments and also show interactively if available
+        # Plot training vs validation accuracy for this fold
+        if 'accuracy' in history.history and 'val_accuracy' in history.history:
+            plt.subplots(figsize=(10, 5))
+            plt.subplot(1, 1, 1)
+            plt.plot(history.history['accuracy'], label='accuracy')
+            plt.plot(history.history['val_accuracy'], label='val_accuracy')
+            plt.xlabel('Epoch')
+            plt.ylabel('Accuracy')
+            plt.ylim([0.5, 1])
+            plt.legend(loc='lower right')
             plt.tight_layout()
-            plt.savefig('confusion_matrix_table.png', dpi=200, bbox_inches='tight')
-            plt.show()
-            
-            print('Confusion matrix (validation):')
-            print(cm)
-
-            # Seaborn heatmap (prettier)
-            if SEABORN_AVAILABLE:
-                plt.figure(figsize=(10, 8))
-                sns.heatmap(cm, annot=True, fmt='d', cmap='Blues',
-                            xticklabels=class_names, yticklabels=class_names)
-                plt.title('Confusion Matrix (Heatmap)')
-                plt.xlabel('Predicted')
-                plt.ylabel('True')
-                plt.tight_layout()
-                plt.savefig('confusion_matrix_heatmap.png', dpi=200, bbox_inches='tight')
-                plt.show()
-
-            # Alternative confusion matrix using one-hot labels and a different style
-            if SEABORN_AVAILABLE:
-                Y_pred = model.predict(X_val, batch_size=250, verbose=0)
-                Y_pred_classes = np.argmax(Y_pred, axis=1)
-                Y_true = np.argmax(y_val_cat, axis=1)
-                confusion_mtx = confusion_matrix(Y_true, Y_pred_classes)
-                f, ax = plt.subplots(figsize=(8, 8))
-                sns.heatmap(confusion_mtx, annot=True, linewidths=0.01, cmap='Greens',
-                            linecolor='gray', fmt='.1f', ax=ax,
-                            xticklabels=class_names, yticklabels=class_names)
-                plt.xlabel('Predicted Label')
-                plt.ylabel('True Label')
-                plt.title('Confusion Matrix')
-                plt.tight_layout()
-                plt.savefig('confusion_matrix_heatmap_greens.png', dpi=200, bbox_inches='tight')
-                plt.show()
-        else:
-            print('sklearn not available; skipping confusion matrix.')
-
-        # Optional: run inference on the same selected-image controls used in demo mode
-        try:
-            samples_all = list_image_paths_and_labels(DATA_ROOT)
-            class_samples = [s for s in samples_all if s[1] == SELECT_CLASS]
-            if class_samples:
-                if SELECT_COUNT and SELECT_COUNT > 0:
-                    selected = class_samples[:SELECT_COUNT]
-                else:
-                    index = max(0, min(SELECT_INDEX, len(class_samples) - 1))
-                    selected = [class_samples[index]]
-
-                print(f"\nRunning predictions on {len(selected)} selected sample(s) from '{SELECT_CLASS}'")
-                for i, (image_path, true_label_name) in enumerate(selected, start=1):
-                    img_arr = load_image_as_array(image_path, size=(28, 28))
-                    img_arr = img_arr[np.newaxis, ..., np.newaxis]  # (1, 28, 28, 1)
-                    probs = model.predict(img_arr, verbose=0)[0]
-                    pred_idx = int(np.argmax(probs))
-                    pred_name = class_names[pred_idx]
-                    pred_conf = float(probs[pred_idx])
-                    print(f"[{i}/{len(selected)}] {image_path}")
-                    print(f"  True label: {true_label_name}")
-                    print(f"  Predicted: {pred_name} (p={pred_conf:.3f})")
-            else:
-                print(f"No samples found for SELECT_CLASS='{SELECT_CLASS}' to run predictions.")
-        except Exception as e:
-            print(f"Skipping selected-sample predictions due to error: {e}")
-
-    else:
-        samples = list_image_paths_and_labels(DATA_ROOT)
-        if not samples:
-            raise RuntimeError(f"No images found under {DATA_ROOT}")
-
-        print(f"Total images found: {len(samples)}")
-
-        # Select image(s) by class
-        if not SELECT_CLASS:
-            raise RuntimeError("SELECT_CLASS must be set to a folder name under archive-2")
-
-        class_samples = [s for s in samples if s[1] == SELECT_CLASS]
-        if not class_samples:
-            raise RuntimeError(f"No images found for class '{SELECT_CLASS}' under {DATA_ROOT}")
-
-        if SELECT_COUNT and SELECT_COUNT > 0:
-            selected = class_samples[:SELECT_COUNT]
-            print(f"Selected {len(selected)} samples from class '{SELECT_CLASS}'")
-        else:
-            index = max(0, min(SELECT_INDEX, len(class_samples) - 1))
-            selected = [class_samples[index]]
-
-        conv = Conv3x3(8)
-        for i, (image_path, label) in enumerate(selected, start=1):
-            image = load_image_as_array(image_path, size=(28, 28))
-            plt.imshow(image, cmap='gray')
-            plt.title(f"{label}")
-            plt.axis('off')
+            plt.savefig(f'accuracy_curve_fold_{fold_idx}.png', dpi=200, bbox_inches='tight')
             plt.show()
 
-            output = conv.forward(image)
-            print(f"[{i}/{len(selected)}] Sample: {image_path}")
-            print(f"Label: {label}")
-            print(f"Conv output shape: {output.shape}")  # (26, 26, 8)
-            fig, ax = plt.subplots(figsize=(8, 6))
-            
-        
+        val_loss, val_acc = model.evaluate(val_generator, verbose=0, steps=validation_steps)
+        fold_accuracies.append(val_acc)
+        print(f"Fold {fold_idx} validation accuracy: {val_acc:.4f}")
+
+        # Save artifacts from the last fold for optional reporting/predictions
+        if fold_idx == n_splits:
+            last_fold_artifacts = {
+                'model': model,
+                'val_generator': val_generator,
+                'validation_steps': validation_steps,
+                'history': history,
+            }
+
+    # Aggregate metrics across folds
+    fold_accuracies = np.array(fold_accuracies, dtype=np.float32)
+    print(f"\nK-Fold results over {n_splits} folds:")
+    print(f"  Accuracies: {fold_accuracies}")
+    print(f"  Mean accuracy: {fold_accuracies.mean():.4f}  Std: {fold_accuracies.std():.4f}")
+
+    # plot last fold loss curve and confusion matrix
+    model = last_fold_artifacts.get('model')
+    val_generator = last_fold_artifacts.get('val_generator')
+    validation_steps = last_fold_artifacts.get('validation_steps')
+    history = last_fold_artifacts.get('history')
+
+    if history is not None and 'val_loss' in history.history:
+        plt.plot(history.history['val_loss'], color='b', label='validation loss')
+        plt.title('Validation Loss (last fold)')
+        plt.xlabel('Number of Epochs')
+        plt.ylabel('Loss')
+        plt.legend()
+        plt.show()
+
+    if SKLEARN_AVAILABLE and model is not None and val_generator is not None:
+        val_pred_probs = model.predict(val_generator, verbose=0, steps=validation_steps)
+        y_val_pred = np.argmax(val_pred_probs, axis=1)
+        y_val_true = val_generator.classes[:len(y_val_pred)]
+        cm = confusion_matrix(y_true=y_val_true, y_pred=y_val_pred)
+
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.axis('off')
+        tbl = ax.table(cellText=cm, rowLabels=class_names, colLabels=class_names, loc='center')
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(8)
+        tbl.scale(1, 1.5)
+        plt.title('Confusion Matrix (last fold)')
+        plt.tight_layout()
+        plt.savefig('confusion_matrix_table.png', dpi=200, bbox_inches='tight')
+        plt.show()
+
+        print('Confusion matrix (last fold validation):')
+        print(cm)
