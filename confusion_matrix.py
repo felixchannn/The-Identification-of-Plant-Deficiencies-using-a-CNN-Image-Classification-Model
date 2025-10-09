@@ -35,6 +35,40 @@ def infer(model, loader, device):
         y_pred.extend(logits.argmax(1).cpu().numpy().tolist())
     return np.array(y_true), np.array(y_pred)
 
+def run_eval(data_dir, weights_path, out_dir="eval_out", img_size=224, batch=32, num_workers=2):
+    out = Path(out_dir); out.mkdir(parents=True, exist_ok=True)
+
+    tfm = transforms.Compose([
+        transforms.Resize((img_size, img_size)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]),
+    ])
+    ds = datasets.ImageFolder(data_dir, transform=tfm)
+    class_names = ds.classes
+    loader = DataLoader(ds, batch_size=batch, shuffle=False, num_workers=num_workers)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+
+    model = load_model(weights_path, n_classes=len(class_names), device=device)
+    y_true, y_pred = infer(model, loader, device)
+
+    labels_range = list(range(len(class_names)))
+    cm = confusion_matrix(y_true, y_pred, labels=labels_range)
+    cm_norm = confusion_matrix(y_true, y_pred, labels=labels_range, normalize="true")
+
+    np.savetxt(out/"confusion_counts.csv", cm, fmt="%d", delimiter=",")
+    np.savetxt(out/"confusion_rownorm.csv", cm_norm, fmt="%.4f", delimiter=",")
+
+    disp = ConfusionMatrixDisplay(cm, display_labels=class_names)
+    disp.plot(xticks_rotation=45)
+    plt.tight_layout(); plt.savefig(out/"confusion_raw.png", dpi=200); plt.close()
+
+    disp = ConfusionMatrixDisplay(cm_norm, display_labels=class_names)
+    disp.plot(xticks_rotation=45)
+    plt.tight_layout(); plt.savefig(out/"confusion_norm_true.png", dpi=200); plt.close()
+
+    print(f"Saved to {out.resolve()}")
+    print("Tip: read the row-normalised plot first to see which classes you’re missing (low diagonal values).")
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--data", required=True, help="Path to test set (ImageFolder).")
@@ -44,42 +78,7 @@ def main():
     ap.add_argument("--batch", type=int, default=32)
     ap.add_argument("--num-workers", type=int, default=2)
     args = ap.parse_args()
-
-    out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
-
-    tfm = transforms.Compose([
-        transforms.Resize((args.img_size, args.img_size)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485,0.456,0.406], std=[0.229,0.224,0.225]),
-    ])
-    ds = datasets.ImageFolder(args.data, transform=tfm)
-    class_names = ds.classes
-    loader = DataLoader(ds, batch_size=args.batch, shuffle=False, num_workers=args.num_workers)
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-
-    model = load_model(args.weights, n_classes=len(class_names), device=device)
-    y_true, y_pred = infer(model, loader, device)
-
-    # Confusion matrices
-    cm = confusion_matrix(y_true, y_pred, labels=list(range(len(class_names))))
-    cm_norm = confusion_matrix(y_true, y_pred, labels=list(range(len(class_names))), normalize="true")
-
-    # Save numeric versions
-    np.savetxt(out/"confusion_counts.csv", cm, fmt="%d", delimiter=",")
-    np.savetxt(out/"confusion_rownorm.csv", cm_norm, fmt="%.4f", delimiter=",")
-
-    # Plot (counts)
-    disp = ConfusionMatrixDisplay(cm, display_labels=class_names)
-    disp.plot(xticks_rotation=45)
-    plt.tight_layout(); plt.savefig(out/"confusion_raw.png", dpi=200); plt.close()
-
-    # Plot (row-normalised = recall)
-    disp = ConfusionMatrixDisplay(cm_norm, display_labels=class_names)
-    disp.plot(xticks_rotation=45)
-    plt.tight_layout(); plt.savefig(out/"confusion_norm_true.png", dpi=200); plt.close()
-
-    print(f"Saved to {out.resolve()}")
-    print("Tip: read the row-normalised plot first to see which classes you're missing (low diagonal values).")
+    run_eval(args.data, args.weights, args.out, args.img_size, args.batch, args.num_workers)
 
 if __name__ == "__main__":
     main()
