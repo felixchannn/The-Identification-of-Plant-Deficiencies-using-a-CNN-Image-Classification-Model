@@ -281,6 +281,73 @@ def build_tutorial_cnn(input_shape, num_classes):
     return model
 
 # =============================================================================
+# METRIC HELPERS (Precision, Recall, F1, MCC) – pure NumPy + optional sklearn
+# =============================================================================
+import math
+
+def _safe_div(n, d):
+    return float(n) / float(d) if d != 0 else 0.0
+
+def confusion_matrix_np(y_true, y_pred, labels):
+    """Numpy fallback if sklearn isn't available."""
+    y_true = np.asarray(y_true)
+    y_pred = np.asarray(y_pred)
+    idx = {lab: i for i, lab in enumerate(labels)}
+    K = len(labels)
+    cm = np.zeros((K, K), dtype=np.int64)
+    for t, p in zip(y_true, y_pred):
+        if t in idx and p in idx:
+            cm[idx[t], idx[p]] += 1
+    return cm
+
+def per_class_precision_recall_f1_from_cm(cm: np.ndarray):
+    """Rows=true labels, Cols=predicted labels."""
+    tp = np.diag(cm).astype(np.float64)
+    support = cm.sum(axis=1).astype(np.float64)     # true counts per class
+    pred_cnt = cm.sum(axis=0).astype(np.float64)    # predicted counts per class
+
+    precision = np.array([_safe_div(tp[i], pred_cnt[i]) for i in range(len(tp))], dtype=np.float64)
+    recall    = np.array([_safe_div(tp[i], support[i])  for i in range(len(tp))], dtype=np.float64)
+    f1 = np.array([
+        _safe_div(2.0 * precision[i] * recall[i], precision[i] + recall[i]) if (precision[i] + recall[i]) > 0 else 0.0
+        for i in range(len(tp))
+    ], dtype=np.float64)
+    return precision, recall, f1, support
+
+def f1_micro_from_cm(cm: np.ndarray) -> float:
+    """Micro-F1 = overall accuracy for single-label multiclass."""
+    correct = float(np.trace(cm))
+    total = float(cm.sum())
+    return _safe_div(correct, total)
+
+def f1_macro_from_vec(f1_vec: np.ndarray, support: np.ndarray) -> float:
+    """Unweighted mean over classes that actually appear."""
+    mask = support > 0
+    return float(f1_vec[mask].mean()) if np.any(mask) else 0.0
+
+def f1_weighted_from_vec(f1_vec: np.ndarray, support: np.ndarray) -> float:
+    """Support-weighted mean over classes."""
+    tot = float(support.sum())
+    return float((f1_vec * support).sum() / tot) if tot > 0 else 0.0
+
+def mcc_from_cm(cm: np.ndarray) -> float:
+    """
+    Multiclass MCC (Gorodkin/Jurman form).
+    cm: KxK confusion matrix
+    """
+    cm = cm.astype(np.float64)
+    t_k = cm.sum(axis=1)          # true counts per class (rows)
+    p_k = cm.sum(axis=0)          # predicted counts per class (cols)
+    c = np.trace(cm)              # correct predictions
+    s = cm.sum()                  # total
+    sum_pk_tk = float(np.dot(p_k, t_k))
+    num = c * s - sum_pk_tk
+    den1 = s**2 - np.dot(p_k, p_k)
+    den2 = s**2 - np.dot(t_k, t_k)
+    den = math.sqrt(den1 * den2) if den1 > 0 and den2 > 0 else 0.0
+    return _safe_div(num, den)
+
+# =============================================================================
 # MAIN EXECUTION: K-FOLD CROSS-VALIDATION TRAINING
 # =============================================================================
 
