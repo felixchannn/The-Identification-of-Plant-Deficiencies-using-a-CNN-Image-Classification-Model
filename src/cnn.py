@@ -7,6 +7,12 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+# --- near the top of src/cnn.py ---
+from pathlib import Path
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+DATA_ROOT = PROJECT_ROOT / "archive-2"   # <— makes ./src/cnn.py robust
+FILTER_SIZE_DEFAULT = 32                 # try 8, 16, 32, 64 ...
+
 # Keras/TensorFlow imports for CNN training with graceful fallback
 # This allows the script to run even if TensorFlow is not installed
 try:
