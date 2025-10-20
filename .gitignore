@@ -4,3 +4,12 @@ __pycache__/
 .venv/
 __pycache__/
 *.pyc
+.venv/
+__pycache__/
+*.pyc
+*.pyd
+*.dll
+*.so
+*.dylib
+*.h5
+*.ckpt
