@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 DATA_ROOT = PROJECT_ROOT / "archive-2"   # <— makes ./src/cnn.py robust
-FILTER_SIZE_DEFAULT = 128                 # try 8, 16, 32, 64 ...
+FILTER_SIZE_DEFAULT = 32                 # try 8, 16, 32, 64 ...
 
 # Keras/TensorFlow imports for CNN training with graceful fallback
 # This allows the script to run even if TensorFlow is not installed
@@ -261,19 +261,19 @@ def build_tutorial_cnn(input_shape, num_classes):
     """
     model = Sequential([
         # First convolutional block: Extract basic features
-        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        Conv2D(64, (3, 3), activation='relu', input_shape=input_shape),
         MaxPool2D((2, 2)),
         
         # Second convolutional block: Extract more complex features
-        Conv2D(32, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Third convolutional block: Extract high-level features
-        Conv2D(32, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Fourth convolutional block: Final feature extraction
-        Conv2D(32, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Classification head
