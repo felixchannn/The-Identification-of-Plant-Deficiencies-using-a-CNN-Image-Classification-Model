@@ -261,19 +261,19 @@ def build_tutorial_cnn(input_shape, num_classes):
     """
     model = Sequential([
         # First convolutional block: Extract basic features
-        Conv2D(16, (3, 3), activation='relu', input_shape=input_shape),
+        Conv2D(128, (3, 3), activation='relu', input_shape=input_shape),
         MaxPool2D((2, 2)),
         
         # Second convolutional block: Extract more complex features
-        Conv2D(16, (3, 3), activation='relu'),
+        Conv2D(128, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Third convolutional block: Extract high-level features
-        Conv2D(16, (3, 3), activation='relu'),
+        Conv2D(128, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Fourth convolutional block: Final feature extraction
-        Conv2D(16, (3, 3), activation='relu'),
+        Conv2D(128, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
         
         # Classification head
