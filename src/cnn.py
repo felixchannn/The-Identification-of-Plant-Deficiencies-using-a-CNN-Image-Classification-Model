@@ -47,7 +47,7 @@ EPOCHS = 10              # Number of complete passes through the training datase
 MODEL_ARCH = "tutorial"   # CNN architecture choice: "tutorial" (4 Conv2D layers) or "simple" (2 Conv2D layers)
 
 # Dataset filtering and size controls
-TRAIN_CLASS_FILTER = ["K", "N_K", "N", "healthy"]  # Specific classes to train on (empty list = all classes)
+TRAIN_CLASS_FILTER = ["K", "N", "healthy"]  # Specific classes to train on (empty list = all classes)
 MAX_SAMPLES_PER_CLASS = None  # Limit samples per class (None = no limit)
 
 # =============================================================================
