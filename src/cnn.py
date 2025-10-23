@@ -572,6 +572,9 @@ if __name__ == "__main__":
         # Calculate confusion matrix
         cm = confusion_matrix(y_true=y_val_true, y_pred=y_val_pred)
 
+        mcc = mcc_from_cm(cm)
+        print(f"\nMatthews Correlation Coefficient (multiclass): {mcc:.4f}")
+
         # Create confusion matrix visualization
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.axis('off')
