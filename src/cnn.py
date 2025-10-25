@@ -28,20 +28,58 @@ except Exception:
     SKLEARN_AVAILABLE = False
 
 # =============================================================================
+# REPRODUCIBILITY SETUP
+# =============================================================================
+# Set seeds for reproducible results across all random number generators
+RANDOM_SEED = 150
+
+def set_seeds(seed=RANDOM_SEED):
+    """
+    Set seeds for all random number generators to ensure reproducible results.
+    
+    Args:
+        seed (int): Random seed value to use for all generators
+    """
+    import random
+    import os
+    
+    # Set Python random seed
+    random.seed(seed)
+    
+    # Set NumPy random seed
+    np.random.seed(seed)
+    
+    # Set TensorFlow/Keras random seeds
+    if KERAS_AVAILABLE:
+        try:
+            import tensorflow as tf
+            tf.random.set_seed(seed)
+            # Set environment variable for TensorFlow operations
+            os.environ['TF_DETERMINISTIC_OPS'] = '1'
+        except ImportError:
+            pass
+    
+    # Set environment variable for reproducible behavior
+    os.environ['PYTHONHASHSEED'] = str(seed)
+
+# Apply seeds immediately
+set_seeds(RANDOM_SEED)
+
+# =============================================================================
 # CONFIGURATION PARAMETERS
 # =============================================================================
 # Dataset configuration
-DATA_ROOT = "./archive-2"  # Root directory containing class folders with images
+DATA_ROOT = "./data_v2"  # Root directory containing class folders with images
 
 # Model and training hyperparameters
-TARGET_SIZE = (227, 227)  # Input image dimensions (width, height)
+TARGET_SIZE = (256, 256)  # Input image dimensions (width, height)
 COLOR_MODE = "rgb"        # Color channels: "rgb" for 3 channels, "grayscale" for 1 channel
 BATCH_SIZE = 32           # Number of samples processed in each training batch
 EPOCHS = 10              # Number of complete passes through the training dataset
-MODEL_ARCH = "tutorial"   # CNN architecture choice: "tutorial" (4 Conv2D layers) or "simple" (2 Conv2D layers)
+MODEL_ARCH = "four"   # CNN architecture choice: "simple" (2), "three" (3), "four" (4), "five" (5), or "six" (6)
 
 # Dataset filtering and size controls
-TRAIN_CLASS_FILTER = ["eggplant__K", "cucumber__K", "tomato__K"]  # Specific classes to train on (empty list = all classes)
+TRAIN_CLASS_FILTER = ["K", "N", "healthy"]  # Specific classes to train on (empty list = all classes)
 MAX_SAMPLES_PER_CLASS = None  # Limit samples per class (None = no limit)
 
 # =============================================================================
@@ -234,49 +272,122 @@ def build_keras_cnn(input_shape, num_classes):
     model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
-def build_tutorial_cnn(input_shape, num_classes):
+def build_three_layer_cnn(input_shape, num_classes):
     """
-    Build a deeper CNN architecture with four convolutional blocks.
-    
+    Build a CNN architecture with three convolutional blocks.
+
     Architecture:
-    - Conv2D(32, 3x3) -> MaxPool2D -> Conv2D(32, 3x3) -> MaxPool2D
-    - Conv2D(32, 3x3) -> MaxPool2D -> Conv2D(32, 3x3) -> MaxPool2D
+    - Conv2D(32, 3x3) -> MaxPool2D
+    - Conv2D(32, 3x3) -> MaxPool2D
+    - Conv2D(32, 3x3) -> MaxPool2D
     - Flatten -> Dense(128) -> Dense(num_classes)
-    
-    This architecture is deeper than the simple CNN and may capture more complex patterns,
-    but requires more computational resources and data to train effectively.
-    
+
     Args:
         input_shape (tuple): Shape of input images (height, width, channels)
         num_classes (int): Number of output classes
-        
+
     Returns:
         keras.Model: Compiled CNN model ready for training
     """
     model = Sequential([
-        # First convolutional block: Extract basic features
         Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
         MaxPool2D((2, 2)),
-        
-        # Second convolutional block: Extract more complex features
+
         Conv2D(32, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
-        
-        # Third convolutional block: Extract high-level features
+
         Conv2D(32, (3, 3), activation='relu'),
         MaxPool2D((2, 2)),
-        
-        # Fourth convolutional block: Final feature extraction
-        Conv2D(32, (3, 3), activation='relu'),
-        MaxPool2D((2, 2)),
-        
-        # Classification head
-        Flatten(),  # Convert 2D feature maps to 1D vector
-        Dense(128, activation='relu'),  # Fully connected layer
-        Dense(num_classes, activation='softmax'),  # Output layer with class probabilities
+
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(num_classes, activation='softmax'),
     ])
-    
-    # Compile model with default Adam optimizer
+
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def build_four_layer_cnn(input_shape, num_classes):
+    """
+    Build a CNN architecture with four convolutional blocks.
+    """
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(num_classes, activation='softmax'),
+    ])
+
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def build_five_layer_cnn(input_shape, num_classes):
+    """
+    Build a CNN architecture with five convolutional blocks.
+    """
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(num_classes, activation='softmax'),
+    ])
+
+    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    return model
+
+def build_six_layer_cnn(input_shape, num_classes):
+    """
+    Build a CNN architecture with six convolutional blocks.
+    """
+    model = Sequential([
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Conv2D(32, (3, 3), activation='relu'),
+        MaxPool2D((2, 2)),
+
+        Flatten(),
+        Dense(128, activation='relu'),
+        Dense(num_classes, activation='softmax'),
+    ])
+
     model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
@@ -386,8 +497,9 @@ if __name__ == "__main__":
     # Configure stratified K-fold cross-validation
     # StratifiedKFold ensures each fold maintains the same class distribution as the original dataset
     n_splits = 5
-    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=42)
+    skf = StratifiedKFold(n_splits=n_splits, shuffle=True, random_state=RANDOM_SEED)
     fold_accuracies = []  # Store accuracy for each fold
+    fold_histories = []  # Store training histories from each fold
     last_fold_artifacts = {}  # Store artifacts from the last fold for final evaluation
 
     # Determine number of channels based on color mode
@@ -410,6 +522,9 @@ if __name__ == "__main__":
     for fold_idx, (train_idx, val_idx) in enumerate(skf.split(X, y), start=1):
         print(f"\n===== Fold {fold_idx}/{n_splits} =====")
         
+        # Reset seeds for each fold to ensure reproducibility
+        set_seeds(RANDOM_SEED + fold_idx)  # Use different seed for each fold
+        
         # Split data into training and validation sets for this fold
         X_train, X_val = X[train_idx], X[val_idx]
         y_train, y_val = y[train_idx], y[val_idx]
@@ -428,8 +543,14 @@ if __name__ == "__main__":
         # MODEL CREATION
         # =============================================================================
         # Build CNN model based on architecture choice
-        if MODEL_ARCH == "tutorial":
-            model = build_tutorial_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
+        if MODEL_ARCH == "three":
+            model = build_three_layer_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
+        elif MODEL_ARCH == "four":
+            model = build_four_layer_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
+        elif MODEL_ARCH == "five":
+            model = build_five_layer_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
+        elif MODEL_ARCH == "six":
+            model = build_six_layer_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
         else:
             model = build_keras_cnn(input_shape=(TARGET_SIZE[0], TARGET_SIZE[1], channels), num_classes=num_classes)
         model.summary()  # Print model architecture summary
@@ -503,13 +624,16 @@ if __name__ == "__main__":
             plt.plot(history.history['val_accuracy'], label='Validation Accuracy')
             plt.xlabel('Epoch')
             plt.ylabel('Accuracy')
-            plt.ylim([0.5, 1])  # Focus on accuracy range 50%-100%
+            plt.ylim([0, 1])  # Full accuracy range 0%-100%
             plt.legend(loc='lower right')
             plt.title(f'Training Progress - Fold {fold_idx}')
             plt.tight_layout()
             plt.savefig(f'accuracy_curve_fold_{fold_idx}.png', dpi=200, bbox_inches='tight')
             plt.show()
 
+        # Store training history for this fold
+        fold_histories.append(history)
+        
         # Evaluate model performance on validation set
         val_loss, val_acc = model.evaluate(val_generator, verbose=0, steps=validation_steps)
         fold_accuracies.append(val_acc)
@@ -533,6 +657,71 @@ if __name__ == "__main__":
     print(f"  Individual fold accuracies: {fold_accuracies}")
     print(f"  Mean accuracy: {fold_accuracies.mean():.4f}  Std: {fold_accuracies.std():.4f}")
     print(f"  Min accuracy: {fold_accuracies.min():.4f}  Max accuracy: {fold_accuracies.max():.4f}")
+
+    # =============================================================================
+    # COMBINED PLOT: ALL FOLDS TOGETHER
+    # =============================================================================
+    # Plot training accuracy for all folds
+    plt.figure(figsize=(12, 6))
+    for i in range(n_splits):
+        if 'accuracy' in fold_histories[i].history:
+            plt.plot(fold_histories[i].history['accuracy'], alpha=0.7, 
+                    label=f'Fold {i+1}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Training Accuracy')
+    plt.title('Training Accuracy across all 5 folds')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.ylim([0, 1.0])
+    plt.tight_layout()
+    plt.savefig('training_accuracy_all_folds.png', dpi=200, bbox_inches='tight')
+    plt.show()
+
+    # Plot validation accuracy for all folds
+    plt.figure(figsize=(12, 6))
+    for i in range(n_splits):
+        if 'val_accuracy' in fold_histories[i].history:
+            plt.plot(fold_histories[i].history['val_accuracy'], alpha=0.7, 
+                    label=f'Fold {i+1}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Validation Accuracy')
+    plt.title('Validation Accuracy across all 5 folds')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.ylim([0, 1.0])
+    plt.tight_layout()
+    plt.savefig('validation_accuracy_all_folds.png', dpi=200, bbox_inches='tight')
+    plt.show()
+
+    # Plot training loss for all folds
+    plt.figure(figsize=(12, 6))
+    for i in range(n_splits):
+        if 'loss' in fold_histories[i].history:
+            plt.plot(fold_histories[i].history['loss'], alpha=0.7, 
+                    label=f'Fold {i+1}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Training Loss')
+    plt.title('Training Loss across all 5 folds')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('training_loss_all_folds.png', dpi=200, bbox_inches='tight')
+    plt.show()
+
+    # Plot validation loss for all folds
+    plt.figure(figsize=(12, 6))
+    for i in range(n_splits):
+        if 'val_loss' in fold_histories[i].history:
+            plt.plot(fold_histories[i].history['val_loss'], alpha=0.7, 
+                    label=f'Fold {i+1}')
+    plt.xlabel('Epoch')
+    plt.ylabel('Validation Loss')
+    plt.title('Validation Loss across all 5 folds')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig('validation_loss_all_folds.png', dpi=200, bbox_inches='tight')
+    plt.show()
 
     # =============================================================================
     # FINAL VISUALIZATION AND ANALYSIS
@@ -566,6 +755,13 @@ if __name__ == "__main__":
         # Calculate confusion matrix
         cm = confusion_matrix(y_true=y_val_true, y_pred=y_val_pred)
 
+        # Compute NumPy-based metrics from confusion matrix
+        prec_vec, rec_vec, f1_vec, support = per_class_precision_recall_f1_from_cm(cm)
+        f1_micro = f1_micro_from_cm(cm)
+        f1_macro = f1_macro_from_vec(f1_vec, support)
+        f1_weighted = f1_weighted_from_vec(f1_vec, support)
+        mcc = mcc_from_cm(cm)
+
         # Create confusion matrix visualization
         fig, ax = plt.subplots(figsize=(8, 6))
         ax.axis('off')
@@ -593,18 +789,17 @@ if __name__ == "__main__":
         print(f'Class names: {class_names}')
         print(cm)
         
-        # Calculate and display per-class metrics
-        print('\nPer-Class Performance Analysis:')
+        # Calculate and display per-class metrics (NumPy helpers)
+        print('\nPer-Class Performance Analysis (NumPy helpers):')
         for i, class_name in enumerate(class_names):
-            true_positives = cm[i, i]
-            false_positives = cm[:, i].sum() - true_positives
-            false_negatives = cm[i, :].sum() - true_positives
-            
-            precision = true_positives / (true_positives + false_positives) if (true_positives + false_positives) > 0 else 0
-            recall = true_positives / (true_positives + false_negatives) if (true_positives + false_negatives) > 0 else 0
-            f1_score = 2 * (precision * recall) / (precision + recall) if (precision + recall) > 0 else 0
-            
             print(f'  {class_name}:')
-            print(f'    Precision: {precision:.4f}')
-            print(f'    Recall: {recall:.4f}')
-            print(f'    F1-Score: {f1_score:.4f}')
+            print(f'    Precision: {prec_vec[i]:.4f}')
+            print(f'    Recall: {rec_vec[i]:.4f}')
+            print(f'    F1-Score: {f1_vec[i]:.4f}')
+
+        # Aggregate metrics
+        print('\nAggregate F1 and MCC (NumPy helpers):')
+        print(f'  F1-micro (accuracy): {f1_micro:.4f}')
+        print(f'  F1-macro: {f1_macro:.4f}')
+        print(f'  F1-weighted: {f1_weighted:.4f}')
+        print(f'  MCC (multiclass): {mcc:.4f}')
