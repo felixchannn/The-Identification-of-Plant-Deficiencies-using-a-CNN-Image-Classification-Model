@@ -693,34 +693,22 @@ if __name__ == "__main__":
     plt.savefig('validation_accuracy_all_folds.png', dpi=200, bbox_inches='tight')
     plt.show()
 
-    # Plot training loss for all folds
+    # Plot all loss curves together (training vs validation)
     plt.figure(figsize=(12, 6))
     for i in range(n_splits):
         if 'loss' in fold_histories[i].history:
-            plt.plot(fold_histories[i].history['loss'], alpha=0.7, 
-                    label=f'Fold {i+1}')
-    plt.xlabel('Epoch')
-    plt.ylabel('Training Loss')
-    plt.title('Training Loss across all 5 folds')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-    plt.tight_layout()
-    plt.savefig('training_loss_all_folds.png', dpi=200, bbox_inches='tight')
-    plt.show()
-
-    # Plot validation loss for all folds
-    plt.figure(figsize=(12, 6))
-    for i in range(n_splits):
+            plt.plot(fold_histories[i].history['loss'], color='steelblue', alpha=0.6, 
+                    label='Training Loss' if i == 0 else "")
         if 'val_loss' in fold_histories[i].history:
-            plt.plot(fold_histories[i].history['val_loss'], alpha=0.7, 
-                    label=f'Fold {i+1}')
+            plt.plot(fold_histories[i].history['val_loss'], color='tomato', alpha=0.6, 
+                    label='Validation Loss' if i == 0 else "")
     plt.xlabel('Epoch')
-    plt.ylabel('Validation Loss')
-    plt.title('Validation Loss across all 5 folds')
+    plt.ylabel('Loss')
+    plt.title('Training & Validation Loss across all 5 folds')
     plt.legend()
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    plt.savefig('validation_loss_all_folds.png', dpi=200, bbox_inches='tight')
+    plt.savefig('loss_curves_all_folds.png', dpi=200, bbox_inches='tight')
     plt.show()
 
     # =============================================================================
