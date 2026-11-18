@@ -6,6 +6,11 @@ Built as a team project in the USUDATA x Sydney Precision Data Science Centre Re
 
 > **Status:** research prototype. The model learns, but it only beats chance by a modest margin on a small, balanced subset of the data. See [Results](#results) and [What we learned](#what-we-learned).
 
+
+📊 **[View the final presentation (PDF)](https://github.com/user-attachments/files/35045983/mentorship_final_presentation.pdf)**: problem, approach and results.
+
+
+
 ## Highlights
 
 - Keras CNN with configurable depth (3–6 convolutional blocks) and filter counts
