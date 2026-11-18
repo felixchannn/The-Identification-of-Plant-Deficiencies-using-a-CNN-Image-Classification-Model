@@ -74,9 +74,9 @@ DATA_ROOT = "./data_v2"  # Root directory containing class folders with images
 # Model and training hyperparameters
 TARGET_SIZE = (256, 256)  # Input image dimensions (width, height)
 COLOR_MODE = "rgb"        # Color channels: "rgb" for 3 channels, "grayscale" for 1 channel
-BATCH_SIZE = 32           # Number of samples processed in each training batch
-EPOCHS = 10              # Number of complete passes through the training dataset
-MODEL_ARCH = "four"   # CNN architecture choice: "simple" (2), "three" (3), "four" (4), "five" (5), or "six" (6)
+BATCH_SIZE = 8           # Number of samples processed in each training batch (smaller to prevent overfitting)
+EPOCHS = 100             # More epochs but with early stopping
+MODEL_ARCH = "three"   # CNN architecture choice: "simple" (2), "three" (3), "four" (4), "five" (5), or "six" (6)
 
 # Dataset filtering and size controls
 TRAIN_CLASS_FILTER = ["K", "N", "healthy"]  # Specific classes to train on (empty list = all classes)
@@ -86,20 +86,26 @@ MAX_SAMPLES_PER_CLASS = None  # Limit samples per class (None = no limit)
 # IMAGE PROCESSING UTILITIES
 # =============================================================================
 
-def load_image_as_array(path, size=(28, 28)):
+def load_image_as_array(path, size=(28, 28), grayscale=False):
     """
     Load and preprocess an image file.
     
     Args:
         path (str): Path to the image file
         size (tuple): Target dimensions (width, height) for resizing
+        grayscale (bool): Whether to convert to grayscale (default: False for RGB)
         
     Returns:
-        np.array: Normalized grayscale image array with values in [0, 1]
+        np.array: Normalized image array with values in [0, 1]
     """
     from PIL import Image
-    # Load image and convert to grayscale (L mode)
-    img = Image.open(path).convert("L")
+    # Load image
+    img = Image.open(path)
+    # Convert to grayscale if requested
+    if grayscale:
+        img = img.convert("L")
+    else:
+        img = img.convert("RGB")
     # Resize to target dimensions
     img = img.resize(size)
     # Convert to numpy array and normalize pixel values to [0, 1]
@@ -126,10 +132,11 @@ def build_dataset_from_folders(root_dir, size=(28, 28), class_filter=None, per_c
         per_class_limit (int): Optional limit on number of samples per class (None = no limit)
         
     Returns:
-        tuple: (X, y, class_names)
+        tuple: (X, y, class_names, file_paths)
             - X: numpy array of shape (N, height, width, 1) containing normalized images
             - y: numpy array of shape (N,) containing integer class labels
             - class_names: list of class names in sorted order, index-aligned with y
+            - file_paths: list of file paths in same order as X, y
     """
     # Discover all class directories
     class_names_all = [d for d in sorted(os.listdir(root_dir)) if os.path.isdir(os.path.join(root_dir, d))]
@@ -147,6 +154,7 @@ def build_dataset_from_folders(root_dir, size=(28, 28), class_filter=None, per_c
     # Load images and labels
     images = []
     labels = []
+    file_paths = []  # Track successful file paths
     for class_name in class_names:
         class_dir = os.path.join(root_dir, class_name)
         count_for_class = 0
@@ -160,13 +168,17 @@ def build_dataset_from_folders(root_dir, size=(28, 28), class_filter=None, per_c
             img_path = os.path.join(class_dir, fname)
             try:
                 # Load and preprocess the image
-                img_arr = load_image_as_array(img_path, size=size)
-            except Exception:
+                # For splitting, we use small grayscale to save memory
+                # Actual training loads full RGB images from disk via ImageDataGenerator
+                img_arr = load_image_as_array(img_path, size=size, grayscale=True)
+            except Exception as e:
+                print(f"Warning: Could not load {img_path}: {e}")
                 # Skip corrupted or unreadable images
                 continue
             
             images.append(img_arr)
             labels.append(class_name_to_index[class_name])
+            file_paths.append(img_path)  # Track successful path
             count_for_class += 1
             
             # Stop if we've reached the per-class limit
@@ -180,7 +192,7 @@ def build_dataset_from_folders(root_dir, size=(28, 28), class_filter=None, per_c
     X = np.stack(images, axis=0)  # Stack images: (N, height, width)
     X = X[..., np.newaxis]        # Add channel dimension: (N, height, width, 1)
     y = np.array(labels, dtype=np.int64)  # Convert labels to numpy array
-    return X, y, class_names
+    return X, y, class_names, file_paths
 
 def build_dataframe_from_folders(root_dir, class_filter=None, per_class_limit=None):
     """
@@ -275,12 +287,13 @@ def build_keras_cnn(input_shape, num_classes):
 def build_three_layer_cnn(input_shape, num_classes):
     """
     Build a CNN architecture with three convolutional blocks.
+    SIMPLIFIED to prevent overfitting on small dataset.
 
     Architecture:
     - Conv2D(32, 3x3) -> MaxPool2D
-    - Conv2D(32, 3x3) -> MaxPool2D
-    - Conv2D(32, 3x3) -> MaxPool2D
-    - Flatten -> Dense(128) -> Dense(num_classes)
+    - Conv2D(64, 3x3) -> MaxPool2D
+    - Conv2D(64, 3x3) -> MaxPool2D
+    - Flatten -> Dense(64) -> Dense(num_classes)
 
     Args:
         input_shape (tuple): Shape of input images (height, width, channels)
@@ -289,22 +302,30 @@ def build_three_layer_cnn(input_shape, num_classes):
     Returns:
         keras.Model: Compiled CNN model ready for training
     """
+    from tensorflow.keras.optimizers import Adam
+    
     model = Sequential([
-        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape),
+        Conv2D(32, (3, 3), activation='relu', input_shape=input_shape, padding='same'),
         MaxPool2D((2, 2)),
+        Dropout(0.4),  # Increased dropout for regularization
 
-        Conv2D(32, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu', padding='same'),
         MaxPool2D((2, 2)),
+        Dropout(0.4),  # Increased dropout
 
-        Conv2D(32, (3, 3), activation='relu'),
+        Conv2D(64, (3, 3), activation='relu', padding='same'),
         MaxPool2D((2, 2)),
+        Dropout(0.4),  # Increased dropout
 
         Flatten(),
-        Dense(128, activation='relu'),
+        Dense(64, activation='relu'),  # Smaller dense layer
+        Dropout(0.6),  # Higher dropout
         Dense(num_classes, activation='softmax'),
     ])
 
-    model.compile(optimizer='adam', loss='categorical_crossentropy', metrics=['accuracy'])
+    # LOWER learning rate to prevent overfitting
+    optimizer = Adam(learning_rate=0.0005, beta_1=0.9, beta_2=0.999, epsilon=1e-07)
+    model.compile(optimizer=optimizer, loss='categorical_crossentropy', metrics=['accuracy'])
     return model
 
 def build_four_layer_cnn(input_shape, num_classes):
@@ -478,12 +499,16 @@ if __name__ == "__main__":
 
     print("Building dataset...")
     # Load all images into memory for stratified splitting
-    X, y, class_names = build_dataset_from_folders(
+    # Note: We load at small size (28x28) just for creating splits - actual training uses full size
+    X, y, class_names, file_paths = build_dataset_from_folders(
         DATA_ROOT,
-        size=(28, 28),  # Note: This will be resized to TARGET_SIZE by ImageDataGenerator
+        size=(28, 28),  # Small size just for creating splits efficiently
         class_filter=class_filter,
         per_class_limit=MAX_SAMPLES_PER_CLASS,
     )
+    print(f"Initial dataset for splitting: {X.shape[0]} samples, shapes: {X.shape}, class dist: {np.bincount(y)}")
+    print(f"  Class names: {class_names}")
+    print(f"  Class indices in y: unique={np.unique(y)}, counts={np.bincount(y)}")
     num_classes = len(class_names)
     print(f"Total samples: {X.shape[0]}, Classes: {num_classes}")
     
@@ -507,14 +532,43 @@ if __name__ == "__main__":
     batch_size = BATCH_SIZE
     epochs = EPOCHS
 
-    # Build a master DataFrame for efficient data loading during training
-    # This DataFrame will be used by ImageDataGenerator for on-demand image loading
-    df_all = build_dataframe_from_folders(
-        DATA_ROOT,
-        class_filter=class_filter,
-        per_class_limit=MAX_SAMPLES_PER_CLASS,
-    )
+    # Build a master DataFrame using the EXACT same file paths that were successfully loaded
+    print("Building DataFrame from successfully loaded file paths...")
+    labels_df = []
+    labels_by_index = []  # Store the integer label for debugging
+    
+    # IMPORTANT: Use the SAME class mapping that was used to create y
+    for idx, path in enumerate(file_paths):
+        # Extract class name from path (e.g., "data_v2/K/img.JPG" -> "K")
+        class_name_from_path = path.split(os.sep)[-2]
+        labels_df.append(class_name_from_path)
+        
+        # Also track the integer label for verification
+        labels_by_index.append(y[idx])
+    
+    df_all = pd.DataFrame({'path': file_paths, 'class': labels_df})
     print(f"DataFrame built: {len(df_all)} rows, columns={list(df_all.columns)}")
+    print(f"Verifying: X has {X.shape[0]} samples, DataFrame has {len(df_all)} rows, file_paths has {len(file_paths)} (all should match)")
+    
+    # DEBUG: Print first few samples to verify order and labels
+    print("\nDEBUG: First 10 samples (verifying alignment between X/y and DataFrame):")
+    for i in range(min(10, len(file_paths))):
+        class_from_path = file_paths[i].split(os.sep)[-2]
+        label_idx = y[i]
+        expected_class = class_names[label_idx] if label_idx < len(class_names) else "UNKNOWN"
+        match = "✓" if class_from_path == expected_class else "✗ MISMATCH"
+        print(f"  [{i}] y={y[i]} | path_class={class_from_path} | expected={expected_class} {match}")
+    
+    print("\nDEBUG: Class distribution in DataFrame:")
+    print(dict(df_all['class'].value_counts()))
+    print("\nDEBUG: Class distribution in y labels:")
+    unique_labels, counts = np.unique(y, return_counts=True)
+    for label_idx, count in zip(unique_labels, counts):
+        print(f"  Label {label_idx} ({class_names[label_idx]}): {count} samples")
+    
+    # CRITICAL CHECK: Ensure they match
+    if X.shape[0] != len(df_all) or X.shape[0] != len(file_paths):
+        raise RuntimeError(f"DataFrame size mismatch! X={X.shape[0]}, df_all={len(df_all)}, file_paths={len(file_paths)}. This should never happen!")
 
     # =============================================================================
     # K-FOLD TRAINING LOOP
@@ -523,7 +577,7 @@ if __name__ == "__main__":
         print(f"\n===== Fold {fold_idx}/{n_splits} =====")
         
         # Reset seeds for each fold to ensure reproducibility
-        set_seeds(RANDOM_SEED + fold_idx)  # Use different seed for each fold
+        set_seeds(RANDOM_SEED)  # Use same seed for reproducibility across folds
         
         # Split data into training and validation sets for this fold
         X_train, X_val = X[train_idx], X[val_idx]
@@ -534,6 +588,12 @@ if __name__ == "__main__":
         train_df = df_all.iloc[train_idx].reset_index(drop=True)
         val_df = df_all.iloc[val_idx].reset_index(drop=True)
         print(f"Fold {fold_idx}: train_df={len(train_df)} rows, val_df={len(val_df)} rows")
+        print(f"  Train class distribution: {dict(train_df['class'].value_counts())}")
+        print(f"  Validation class distribution: {dict(val_df['class'].value_counts())}")
+        
+        # DEBUG: Show some actual paths being used
+        print(f"  Sample train paths: {train_df['path'].head(3).tolist()}")
+        print(f"  Sample val paths: {val_df['path'].head(3).tolist()}")
 
         # Ensure categorical encoding is available (ImageDataGenerator handles this, but we check here)
         _ = to_categorical(y_train, num_classes=num_classes)
@@ -558,14 +618,49 @@ if __name__ == "__main__":
         # =============================================================================
         # DATA AUGMENTATION AND GENERATORS
         # =============================================================================
+        # Custom preprocessing function to add color jitter - TEMPORARILY DISABLED
+        # Uncomment below and in train_datagen if you want to re-enable
+        def apply_color_jitter(img):
+            """
+            Apply subtle color augmentation to RGB images.
+            
+            Args:
+                img: Image array with pixel values in [0, 1]
+                
+            Returns:
+                Augmented image array
+            """
+            # Handle both RGB and grayscale images
+            if len(img.shape) == 2:
+                # Grayscale image - convert to 3-channel by duplicating
+                img = np.stack([img] * 3, axis=-1)
+            
+            if img.shape[2] == 1:
+                # Single channel - convert to 3-channel
+                img = np.repeat(img, 3, axis=2)
+            
+            # Ensure we have 3 channels for RGB processing
+            if img.shape[2] >= 3:
+                # Apply subtle brightness and contrast adjustments
+                brightness_delta = np.random.uniform(-0.1, 0.1)
+                img = np.clip(img + brightness_delta, 0, 1)
+                
+                # Apply subtle contrast adjustment
+                contrast_factor = np.random.uniform(0.9, 1.1)
+                img = np.clip((img - 0.5) * contrast_factor + 0.5, 0, 1)
+            
+            return img
+        
         # Create data generators with augmentation for training and without for validation
+        # SIMPLIFIED AUGMENTATION: Start with basic transforms only
         train_datagen = ImageDataGenerator(
             rescale=1.0/255.0,        # Normalize pixel values to [0, 1]
             horizontal_flip=True,     # Randomly flip images horizontally
-            rotation_range=5,         # Random rotation up to 5 degrees
-            width_shift_range=0.1,    # Random horizontal shift up to 10%
-            height_shift_range=0.1,   # Random vertical shift up to 10%
-            zoom_range=0.1,           # Random zoom up to 10%
+            rotation_range=10,       # Random rotation up to 10 degrees (reduced)
+            width_shift_range=0.1,   # Random horizontal shift up to 10% (reduced)
+            height_shift_range=0.1,  # Random vertical shift up to 10% (reduced)
+            zoom_range=0.1,          # Random zoom up to 10% (reduced)
+            # NO vertical_flip, NO brightness_range, NO preprocessing_function
         )
         val_datagen = ImageDataGenerator(rescale=1.0/255.0)  # Only normalization for validation
 
@@ -599,10 +694,44 @@ if __name__ == "__main__":
         # Calculate steps per epoch based on dataset size and batch size
         steps_per_epoch = int(np.ceil(len(train_df) / batch_size))
         validation_steps = int(np.ceil(len(val_df) / batch_size))
+        
+        # Calculate class weights to handle any imbalance
+        # TEMPORARILY DISABLED: Let's use uniform weights to see if class weights were causing overfitting
+        from sklearn.utils.class_weight import compute_class_weight
+        class_weights = compute_class_weight(
+            'balanced',
+            classes=np.unique(y_train),
+            y=y_train
+        )
+        class_weight_dict = {i: class_weights[i] for i in range(len(class_weights))}
+        print(f"  Class weights: {class_weight_dict}")
+        print(f"  DISABLED: Using uniform weights (1, 1, 1) to prevent overfitting")
+        class_weight_dict = {0: 1.0, 1: 1.0, 2: 1.0}  # Force uniform weights
 
         # =============================================================================
-        # MODEL TRAINING
+        # MODEL TRAINING WITH CALLBACKS
         # =============================================================================
+        # Add callbacks for better training
+        from tensorflow.keras.callbacks import EarlyStopping, ReduceLROnPlateau
+        
+        callbacks = [
+            EarlyStopping(
+                monitor='val_loss',
+                patience=15,  # More patience to allow model to learn
+                restore_best_weights=True,
+                verbose=1,
+                min_delta=0.0001  # Require actual improvement
+            ),
+            ReduceLROnPlateau(
+                monitor='val_loss',
+                factor=0.3,  # More aggressive reduction
+                patience=7,  # Wait 7 epochs
+                min_lr=1e-8,
+                verbose=1,
+                min_delta=0.0001
+            )
+        ]
+        
         print(f"Starting training for fold {fold_idx}...")
         history = model.fit(
             train_generator,
@@ -610,12 +739,21 @@ if __name__ == "__main__":
             epochs=epochs,
             steps_per_epoch=steps_per_epoch,
             validation_steps=validation_steps,
+            callbacks=callbacks,  # Add callbacks for better training
             verbose=1,  # Show progress during training
+            class_weight=class_weight_dict,  # Use class weights to handle imbalance
         )
 
         # =============================================================================
         # FOLD EVALUATION AND VISUALIZATION
         # =============================================================================
+        # Print training progress summary
+        if 'accuracy' in history.history and 'val_accuracy' in history.history:
+            print(f"\nFold {fold_idx} Training Summary:")
+            print(f"  Final training accuracy: {history.history['accuracy'][-1]:.4f}")
+            print(f"  Final validation accuracy: {history.history['val_accuracy'][-1]:.4f}")
+            print(f"  Best validation accuracy: {max(history.history['val_accuracy']):.4f}")
+        
         # Plot training vs validation accuracy curve for this fold
         if 'accuracy' in history.history and 'val_accuracy' in history.history:
             plt.subplots(figsize=(10, 5))
