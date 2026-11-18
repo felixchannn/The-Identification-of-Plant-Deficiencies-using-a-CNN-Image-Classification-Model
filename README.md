@@ -1,8 +1,8 @@
-# Interstellar: Plant Nutrient Deficiency Detection with CNNs
+# Identification of Plant Deficiencies using a CNN Image Classification Model
 
 A convolutional neural network that classifies leaf images as **nitrogen-deficient (N)**, **potassium-deficient (K)** or **healthy**. Early, automated detection of plant stress could help farmers act before yield is lost. Today that diagnosis is mostly manual, and different stressors often look alike.
 
-Built as a team project in the University of Sydney mentorship program, supervised by Dr Pratibha Panwar.
+Built as a team project in the USUDATA x Sydney Precision Data Science Centre Research Mentoring Program with Dr Pratibha Panwar.
 
 > **Status:** research prototype. The model learns, but it only beats chance by a modest margin on a small, balanced subset of the data. See [Results](#results) and [What we learned](#what-we-learned).
 
